@@ -5,7 +5,7 @@ import math
 from typing import List, Dict, Any
 
 def fetch_all_24hr_tickers() -> List[Dict]:
-    url = "https://fapi.binance.com/fapi/v1/ticker/24hr"
+    url = "https://data.binance.com/fapi/v1/ticker/24hr"
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
