@@ -95,8 +95,8 @@ def format_alert_message(top3: List[Dict]) -> str:
 
 
 def send_to_telegram(message: str) -> bool:
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    token = os.getenv("8194978480:AAHV_8fhFk3kr2C_9SxNcGGFRbFH4yluWpI")
+    chat_id = os.getenv("8100573508")
 
     if not token or not chat_id:
         print("❌ ERROR: Faltan TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID")
