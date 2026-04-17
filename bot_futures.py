@@ -4,29 +4,22 @@ import os
 import math
 from typing import List, Dict, Any
 
-# ====================== PROXY CONFIGURADO ======================
-# Proxy tomado de tu lista (Indonesia - Jakarta)
-PROXY_URL = os.getenv("PROXY_URL", "socks5://103.76.149.140:1080")
-
-if PROXY_URL:
-    proxies = {"http": PROXY_URL, "https": PROXY_URL}
-    print(f"🔀 Usando proxy: {PROXY_URL}")
-else:
-    proxies = None
-    print("⚠️ Sin proxy")
+# ====================== SIN PROXY ======================
+proxies = None
+print("🌐 Conexión directa sin proxy")
 
 # Endpoints de Binance Futures
 BASE_URLS = [
+    "https://data.binance.com",
     "https://fapi.binance.com",
-    "https://testnet.binancefuture.com",
-    "https://data.binance.com"
+    "https://testnet.binancefuture.com"
 ]
 
 def fetch_all_24hr_tickers() -> List[Dict]:
     for base in BASE_URLS:
         url = f"{base}/fapi/v1/ticker/24hr"
         try:
-            response = requests.get(url, timeout=15, proxies=proxies)
+            response = requests.get(url, timeout=30)
             if response.status_code == 200:
                 print(f"✅ ¡Conexión exitosa con {base}!")
                 return response.json()
@@ -38,7 +31,7 @@ def fetch_all_24hr_tickers() -> List[Dict]:
         except Exception as e:
             print(f"❌ Error en {base}: {e}")
             continue
-    print("❌ Todos los endpoints fallaron. Prueba otro proxy.")
+    print("❌ Todos los endpoints fallaron.")
     return []
 
 
@@ -46,7 +39,7 @@ def fetch_klines(symbol: str, interval: str = "1m", limit: int = 10) -> List[Lis
     for base in BASE_URLS:
         url = f"{base}/fapi/v1/klines?symbol={symbol}&interval={interval}&limit={limit}"
         try:
-            response = requests.get(url, timeout=10, proxies=proxies)
+            response = requests.get(url, timeout=30)
             if response.status_code == 200:
                 return response.json()
         except:
@@ -129,7 +122,7 @@ def send_to_telegram(message: str) -> bool:
 
 
 def main():
-    print("🤖 BOT FUTUROS BINANCE INICIADO EN RAILWAY + PROXY (Indonesia) 🔥")
+    print("🤖 BOT FUTUROS BINANCE SIN PROXY 🔥")
     last_top_symbols: List[str] = []
 
     while True:
