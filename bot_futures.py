@@ -3,8 +3,8 @@ import time
 from typing import List, Dict
 
 # ====================== CONFIG ======================
-TOKEN = "TU_TOKEN_AQUI"
-CHAT_ID = "TU_CHAT_ID_AQUI"
+TOKEN = "8194978480:AAHV_8fhFk3kr2C_9SxNcGGFRbFH4yluWpI"
+CHAT_ID = "8100573508"
 
 BASE_URL = "https://fapi.binance.com"
 
