@@ -1,274 +1,193 @@
 import requests
 import time
-import math
-from typing import List, Dict, Any
-
-# ====================== SIN PROXY ======================
-proxies = None
-print("🌐 Conexión directa sin proxy")
+from typing import List, Dict
 
 # ====================== CONFIG ======================
 TOKEN = "8194978480:AAHV_8fhFk3kr2C_9SxNcGGFRbFH4yluWpI"
 CHAT_ID = "8100573508"
 
-# ====================== ENDPOINTS ======================
-BASE_URLS = [
-    "https://data.binance.com",
-    "https://fapi.binance.com",
-    "https://testnet.binancefuture.com"
-]
+BASE_URL = "https://fapi.binance.com"
 
 # ====================== MEMORIA ======================
-history_pct: Dict[str, List[float]] = {}
-appearance_data: Dict[str, Dict[str, int]] = {}
+price_history: Dict[str, List[float]] = {}
 special_tracking: Dict[str, float] = {}
-
-last_top_symbols: List[str] = []
-last_update_id = 0
-minute_counter = 0
+streak_counter: Dict[str, int] = {}
 
 # ====================== FETCH ======================
-def fetch_all_24hr_tickers() -> List[Dict]:
-    for base in BASE_URLS:
-        try:
-            r = requests.get(f"{base}/fapi/v1/ticker/24hr", timeout=20)
-            if r.status_code == 200:
-                return r.json()
-        except:
-            continue
-    return []
-
-def fetch_klines(symbol: str, interval: str = "1m", limit: int = 10):
-    for base in BASE_URLS:
-        try:
-            r = requests.get(f"{base}/fapi/v1/klines?symbol={symbol}&interval={interval}&limit={limit}", timeout=20)
-            if r.status_code == 200:
-                return r.json()
-        except:
-            continue
-    return []
+def fetch_tickers() -> List[Dict]:
+    url = f"{BASE_URL}/fapi/v1/ticker/24hr"
+    try:
+        r = requests.get(url, timeout=10)
+        return r.json()
+    except Exception as e:
+        print(f"❌ Error fetch: {e}")
+        return []
 
 # ====================== TELEGRAM ======================
-def send(msg):
+def send_telegram(msg: str):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     try:
-        requests.post(
-            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-            data={"chat_id": CHAT_ID, "text": msg},
-            timeout=10
-        )
-    except:
-        pass
-
-# ====================== RESET ======================
-def check_commands():
-    global last_update_id
-    try:
-        r = requests.get(
-            f"https://api.telegram.org/bot{TOKEN}/getUpdates",
-            params={"offset": last_update_id + 1},
-            timeout=10
-        )
-        data = r.json()
-
-        for u in data.get("result", []):
-            last_update_id = u["update_id"]
-
-            msg = u.get("message", {})
-            text = msg.get("text", "")
-            chat_id = str(msg.get("chat", {}).get("id"))
-
-            if chat_id != CHAT_ID:
-                continue
-
-            if text == "/reset":
-                history_pct.clear()
-                appearance_data.clear()
-                special_tracking.clear()
-                send("🔄 Rachas reiniciadas correctamente")
-
-    except:
-        pass
-
-# ====================== EMOJIS ======================
-def get_emoji(symbol):
-    data = appearance_data.setdefault(symbol, {
-        "rockets": 0,
-        "fires": 0,
-        "seen": False
-    })
-
-    # consecutivo → 🔥
-    if symbol in last_top_symbols:
-        data["fires"] += 1
-        return "🔥" * data["fires"]
-
-    # apareció antes → 🚀
-    if data["seen"]:
-        data["rockets"] += 1
-        data["fires"] = 0
-        return "🚀" * data["rockets"]
-
-    # primera vez
-    data["seen"] = True
-    return "🆕"
-
-# ====================== SCORE ======================
-def calculate_score_and_metrics(ticker: Dict, klines: List):
-    if len(klines) < 5:
-        return None
-
-    closes = [float(k[4]) for k in klines]
-    volumes = [float(k[5]) for k in klines]
-
-    consecutive_ups = 0
-    for i in range(len(closes)-1, 0, -1):
-        if closes[i] > closes[i-1]:
-            consecutive_ups += 1
-        else:
-            break
-
-    if consecutive_ups < 3:
-        return None
-
-    vol_growth = 0
-    for i in range(len(volumes)-1, 0, -1):
-        if volumes[i] > volumes[i-1] * 1.05:
-            vol_growth += 1
-        else:
-            break
-
-    momentum = (closes[-1] / closes[-5] - 1) * 100
-    pct = float(ticker["priceChangePercent"])
-
-    score = pct*4 + momentum*3 + consecutive_ups*20 + vol_growth*10
-
-    return {
-        "symbol": ticker["symbol"],
-        "pct": pct,
-        "score": score
-    }
+        requests.post(url, data={"chat_id": CHAT_ID, "text": msg}, timeout=10)
+        print("📨 Enviado a Telegram")
+    except Exception as e:
+        print(f"❌ Error Telegram: {e}")
 
 # ====================== MAIN ======================
 def main():
-    global last_top_symbols, minute_counter
-
-    print("🤖 BOT FUTUROS PRO 🔥")
+    print("🔥 BOT PRO ACTIVADO 🔥")
+    minute_counter = 0
 
     while True:
         try:
-            check_commands()
+            tickers = fetch_tickers()
+            if not tickers:
+                time.sleep(20)
+                continue
 
-            tickers = fetch_all_24hr_tickers()
-            candidates = []
             active_symbols = set()
 
+            # ================= LOOP PRINCIPAL =================
             for t in tickers:
                 symbol = t.get("symbol", "")
+
                 if not symbol.endswith("USDT"):
                     continue
 
                 try:
-                    pct = float(t.get("priceChangePercent", 0))
+                    price = float(t.get("lastPrice", 0))
+                    pct24 = float(t.get("priceChangePercent", 0))
                 except:
                     continue
 
-                # ===== FILTRO 10-30 =====
-                if 10 <= pct <= 30:
+                # ================= FILTRO 10% - 30% =================
+                if 10 <= pct24 <= 30:
                     active_symbols.add(symbol)
 
-                    history_pct.setdefault(symbol, []).append(pct)
-                    if len(history_pct[symbol]) > 5:
-                        history_pct[symbol].pop(0)
+                    if symbol not in price_history:
+                        price_history[symbol] = []
 
-                # ===== +30 =====
-                if pct > 30:
-                    prev = special_tracking.get(symbol, pct)
-                    if pct - prev >= 2:
-                        special_tracking[symbol] = pct
+                    price_history[symbol].append(price)
+
+                    if len(price_history[symbol]) > 5:
+                        price_history[symbol].pop(0)
+
+                # ================= SEGUIMIENTO +30 =================
+                if pct24 > 30:
+                    prev = special_tracking.get(symbol, pct24)
+                    growth = pct24 - prev
+
+                    if growth >= 2:
+                        special_tracking[symbol] = pct24
                     else:
                         special_tracking.pop(symbol, None)
 
-                # ===== SCORE =====
-                klines = fetch_klines(symbol)
-                m = calculate_score_and_metrics(t, klines)
-                if m:
-                    candidates.append(m)
+            # ================= LIMPIEZA =================
+            for sym in list(price_history.keys()):
+                if sym not in active_symbols:
+                    price_history.pop(sym, None)
 
             minute_counter += 1
+            print(f"⏱ Minuto {minute_counter}")
 
-            # ===== CADA 5 MIN =====
+            # ================= CADA 5 MIN =================
             if minute_counter >= 5:
 
-                results = []
+                candidates = []
 
-                for symbol, hist in history_pct.items():
-                    if len(hist) < 5:
+                for symbol, prices in price_history.items():
+                    if len(prices) < 5:
                         continue
 
-                    start = hist[0]
-                    now = hist[-1]
-                    growth = now - start
+                    start_price = prices[0]
+                    end_price = prices[-1]
 
-                    results.append({
+                    growth = ((end_price - start_price) / start_price) * 100
+
+                    candidates.append({
                         "symbol": symbol,
-                        "start": start,
-                        "now": now,
+                        "start": start_price,
+                        "end": end_price,
                         "growth": growth
                     })
 
-                results.sort(key=lambda x: x["growth"], reverse=True)
-                top = results[:3]
+                # ordenar por crecimiento real
+                candidates.sort(key=lambda x: x["growth"], reverse=True)
+                top3 = candidates[:3]
 
+                # =================🔥 STREAK SYSTEM =================
+                current_symbols = {c["symbol"] for c in top3}
+
+                # actualizar streaks existentes
+                for sym in list(streak_counter.keys()):
+                    if sym in current_symbols:
+                        streak_counter[sym] += 1
+                    else:
+                        streak_counter[sym] -= 1
+                        if streak_counter[sym] <= 0:
+                            streak_counter.pop(sym)
+
+                # agregar nuevos
+                for sym in current_symbols:
+                    if sym not in streak_counter:
+                        streak_counter[sym] = 1
+
+                # ================= MENSAJE =================
                 msg = "🚀🔥 TOP MOVIMIENTOS (Últimos 5 min) 🔥🚀\n\n"
+                medals = ["🥇", "🥈", "🥉"]
 
-                for i, c in enumerate(top):
-                    emoji = get_emoji(c["symbol"])
+                for i, c in enumerate(top3):
+
+                    fires = "🔥" * streak_counter.get(c["symbol"], 0)
 
                     estado = (
-                        "Rompiendo fuerte 🚀" if c["growth"] > 15 else
-                        "Momentum sólido 📈" if c["growth"] > 8 else
+                        "EXPLOSIÓN 🚀🔥" if c["growth"] > 5 else
+                        "Momentum fuerte 📈" if c["growth"] > 3 else
                         "Subida constante 🔥"
                     )
 
                     msg += (
-                        f"{['🥇','🥈','🥉'][i]} {c['symbol']} {emoji}\n"
-                        f"Inicio: +{c['start']:.1f}% → Ahora: +{c['now']:.1f}%\n"
-                        f"Impulso real: +{c['growth']:.1f}%\n"
+                        f"{medals[i]} {c['symbol']} {fires}\n"
+                        f"Inicio: {c['start']:.6f} → Ahora: {c['end']:.6f}\n"
+                        f"Cambio real: +{c['growth']:.2f}%\n"
                         f"Estado: {estado}\n\n"
                     )
 
-                # ===== +30 =====
+                # ================= SEGUIMIENTO +30 =================
                 if special_tracking:
-                    msg += "\n📊 SEGUIMIENTO ESPECIAL (+30% ACTIVOS)\n\n"
+                    msg += "\n📊 SEGUIMIENTO ESPECIAL (+30%)\n\n"
 
-                    for sym, pct in special_tracking.items():
-                        hist = history_pct.get(sym, [])
+                    for sym in list(special_tracking.keys()):
+                        hist = price_history.get(sym, [])
+
                         if len(hist) >= 2:
-                            prev = hist[-2]
-                            growth = pct - prev
+                            prev_price = hist[-2]
+                            current_price = hist[-1]
 
-                            if growth >= 2:
-                                emoji = get_emoji(sym)
+                            growth = ((current_price - prev_price) / prev_price) * 100
 
+                            if growth >= 1:
                                 msg += (
-                                    f"🚨 {sym} {emoji}\n"
-                                    f"Hace 1 min: +{prev:.1f}% → Ahora: +{pct:.1f}%\n"
-                                    f"Impulso reciente: +{growth:.1f}%\n"
-                                    f"Estado: EXPLOSIÓN 🚀🔥\n\n"
+                                    f"🚨 {sym}\n"
+                                    f"Hace 1 min: {prev_price:.6f} → Ahora: {current_price:.6f}\n"
+                                    f"Impulso: +{growth:.2f}%\n"
+                                    f"Estado: CONTINÚA 🚀\n\n"
                                 )
+                            else:
+                                # si pierde fuerza, eliminar
+                                special_tracking.pop(sym, None)
 
                 msg += "⏱ Cada 1 min | Ventana 5 min\n💰 Binance Futures"
 
-                send(msg)
+                send_telegram(msg)
 
-                last_top_symbols = [c["symbol"] for c in top]
                 minute_counter = 0
 
             time.sleep(60)
 
         except Exception as e:
-            print("Error:", e)
+            print(f"❌ Error general: {e}")
             time.sleep(20)
 
+# ====================== RUN ======================
 if __name__ == "__main__":
     main()
