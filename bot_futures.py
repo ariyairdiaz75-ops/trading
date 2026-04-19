@@ -2,11 +2,23 @@ import requests
 import time
 from typing import List, Dict
 
+# ====================== SIN PROXY ======================
+proxies = None
+print("🌐 Conexión directa sin proxy")
+
 # ====================== CONFIG ======================
 TOKEN = "8194978480:AAHV_8fhFk3kr2C_9SxNcGGFRbFH4yluWpI"
 CHAT_ID = "8100573508"
 
-BASE_URL = "https://fapi.binance.com"
+# ====================== ENDPOINTS ======================
+BASE_URLS = [
+    "https://data.binance.com",
+    "https://fapi.binance.com",
+    "https://fapi1.binance.com",
+    "https://fapi2.binance.com",
+    "https://fapi3.binance.com",
+    "https://testnet.binancefuture.com"
+]
 
 # ====================== MEMORIA ======================
 price_history: Dict[str, List[float]] = {}
@@ -15,32 +27,37 @@ streak_counter: Dict[str, int] = {}
 
 # ====================== FETCH ======================
 def fetch_tickers() -> List[Dict]:
-    url = f"{BASE_URL}/fapi/v1/ticker/24hr"
 
     headers = {
         "User-Agent": "Mozilla/5.0"
     }
 
-    try:
-        r = requests.get(url, headers=headers, timeout=10)
+    for base in BASE_URLS:
+        url = f"{base}/fapi/v1/ticker/24hr"
 
-        if r.status_code != 200:
-            print(f"⚠️ Status code: {r.status_code}")
-            return []
+        try:
+            r = requests.get(url, headers=headers, proxies=proxies, timeout=10)
 
-        data = r.json()
+            if r.status_code == 200:
+                data = r.json()
 
-        # 🔥 VALIDACIÓN CLAVE (ARREGLA TU ERROR)
-        if not isinstance(data, list):
-            print(f"⚠️ Respuesta inválida: {data}")
-            return []
+                # 🔥 ARREGLO ERROR
+                if isinstance(data, list):
+                    print(f"✅ Conectado a {base}")
+                    return data
+                else:
+                    print(f"⚠️ Respuesta inválida en {base}")
 
-        print("✅ Conectado a Binance Futures")
-        return data
+            elif r.status_code == 451:
+                print(f"🚫 Bloqueado en {base}, intentando otro...")
 
-    except Exception as e:
-        print(f"❌ Error fetch: {e}")
-        return []
+            else:
+                print(f"⚠️ Error {r.status_code} en {base}")
+
+        except Exception as e:
+            print(f"❌ Error en {base}: {e}")
+
+    return []
 
 # ====================== TELEGRAM ======================
 def send_telegram(msg: str):
@@ -68,7 +85,7 @@ def main():
             # ================= LOOP PRINCIPAL =================
             for t in tickers:
 
-                # 🔥 PROTECCIÓN EXTRA (ARREGLA ERROR)
+                # 🔥 ARREGLO ERROR
                 if not isinstance(t, dict):
                     continue
 
@@ -134,11 +151,10 @@ def main():
                         "growth": growth
                     })
 
-                # ordenar por crecimiento real
                 candidates.sort(key=lambda x: x["growth"], reverse=True)
                 top3 = candidates[:3]
 
-                # =================🔥 STREAK SYSTEM =================
+                # =================🔥 STREAK =================
                 current_symbols = {c["symbol"] for c in top3}
 
                 for sym in list(streak_counter.keys()):
@@ -174,7 +190,7 @@ def main():
                         f"Estado: {estado}\n\n"
                     )
 
-                # ================= SEGUIMIENTO +30 =================
+                # ================= SEGUIMIENTO ESPECIAL (NO SE TOCÓ) =================
                 if special_tracking:
                     msg += "\n📊 SEGUIMIENTO ESPECIAL (+30%)\n\n"
 
