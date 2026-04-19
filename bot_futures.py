@@ -3,8 +3,8 @@ import time
 from typing import List, Dict
 
 # ====================== CONFIG ======================
-TOKEN = "8194978480:AAHV_8fhFk3kr2C_9SxNcGGFRbFH4yluWpI"
-CHAT_ID = "8100573508"
+TOKEN = "TU_TOKEN_AQUI"
+CHAT_ID = "TU_CHAT_ID_AQUI"
 
 BASE_URL = "https://fapi.binance.com"
 
@@ -16,9 +16,28 @@ streak_counter: Dict[str, int] = {}
 # ====================== FETCH ======================
 def fetch_tickers() -> List[Dict]:
     url = f"{BASE_URL}/fapi/v1/ticker/24hr"
+
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
+
     try:
-        r = requests.get(url, timeout=10)
-        return r.json()
+        r = requests.get(url, headers=headers, timeout=10)
+
+        if r.status_code != 200:
+            print(f"⚠️ Status code: {r.status_code}")
+            return []
+
+        data = r.json()
+
+        # 🔥 VALIDACIÓN CLAVE (ARREGLA TU ERROR)
+        if not isinstance(data, list):
+            print(f"⚠️ Respuesta inválida: {data}")
+            return []
+
+        print("✅ Conectado a Binance Futures")
+        return data
+
     except Exception as e:
         print(f"❌ Error fetch: {e}")
         return []
@@ -48,6 +67,11 @@ def main():
 
             # ================= LOOP PRINCIPAL =================
             for t in tickers:
+
+                # 🔥 PROTECCIÓN EXTRA (ARREGLA ERROR)
+                if not isinstance(t, dict):
+                    continue
+
                 symbol = t.get("symbol", "")
 
                 if not symbol.endswith("USDT"):
@@ -117,7 +141,6 @@ def main():
                 # =================🔥 STREAK SYSTEM =================
                 current_symbols = {c["symbol"] for c in top3}
 
-                # actualizar streaks existentes
                 for sym in list(streak_counter.keys()):
                     if sym in current_symbols:
                         streak_counter[sym] += 1
@@ -126,7 +149,6 @@ def main():
                         if streak_counter[sym] <= 0:
                             streak_counter.pop(sym)
 
-                # agregar nuevos
                 for sym in current_symbols:
                     if sym not in streak_counter:
                         streak_counter[sym] = 1
@@ -173,7 +195,6 @@ def main():
                                     f"Estado: CONTINÚA 🚀\n\n"
                                 )
                             else:
-                                # si pierde fuerza, eliminar
                                 special_tracking.pop(sym, None)
 
                 msg += "⏱ Cada 1 min | Ventana 5 min\n💰 Binance Futures"
